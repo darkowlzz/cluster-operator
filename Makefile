@@ -1,3 +1,5 @@
+# Project name
+PROJECT=github.com/storageos/cluster-operator
 # Current Operator version
 VERSION ?= 2.2.0
 # Default bundle image tag
@@ -23,6 +25,11 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# Version of go used for containerized builds.
+GO_VERSION=1.15.0
+# Go build cache directory for containerized builds.
+CACHE_DIR=$(shell pwd)/.cache
+
 # Operator-SDK binary name and version.
 OSDK=operator-sdk
 OSDK_VERSION=v1.0.0
@@ -37,6 +44,11 @@ MACHINE=$(shell uname -m)
 .PHONY: help
 help:  ## Display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@echo ""
+	@echo "To run any of the above in docker, suffix the command with '-docker':"
+	@echo ""
+	@echo "  make manager-docker"
+	@echo ""
 
 ##@ Build
 
@@ -87,6 +99,10 @@ deploy: manifests kustomize ## Deploy controller in the configured Kubernetes cl
 
 uninstall: manifests kustomize ## Uninstall CRDs from a cluster
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
+
+tidy: ## Prune, add and vendor go dependencies.
+	go mod tidy -v
+	go mod vendor -v
 
 ##@ Test
 
@@ -141,3 +157,22 @@ OSDK=$(GOBIN)/operator-sdk
 else
 OSDK=$(shell which operator-sdk)
 endif
+
+# This target matches any target ending in '-docker' eg. 'test-docker'. This
+# allows running makefile targets inside a container by appending '-docker' to
+# it.
+%-docker:
+	mkdir -p $(CACHE_DIR)/go $(CACHE_DIR)/cache
+	# golangci-lint build cache.
+	mkdir -p $(CACHE_DIR)/golangci-lint
+	# Run the make target in docker.
+	docker run -it --rm \
+		-v $(CACHE_DIR)/go:/go \
+		-v $(CACHE_DIR)/cache:/.cache/go-build \
+		-v $(CACHE_DIR)/golangci-lint:/.cache/golangci-lint \
+		-v $(shell pwd):/go/src/${PROJECT} \
+		-w /go/src/${PROJECT} \
+		-u $(shell id -u):$(shell id -g) \
+		--entrypoint "make" \
+		golang:$(GO_VERSION) \
+		"$(patsubst %-docker,%,$@)"

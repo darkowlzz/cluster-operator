@@ -1,5 +1,8 @@
 _old
 
+# Go build cache used for containerized builds.
+.cache
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
