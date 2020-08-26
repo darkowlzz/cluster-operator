@@ -1,5 +1,5 @@
 # Current Operator version
-VERSION ?= 0.0.1
+VERSION ?= 2.2.0
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
@@ -23,56 +23,77 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-all: manager
+# Operator-SDK binary name and version.
+OSDK=operator-sdk
+OSDK_VERSION=v1.0.0
+MACHINE=$(shell uname -m)
 
-# Run tests
-test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+##@ General
 
-# Build manager binary
-manager: generate fmt vet
+# The help will print out all targets with their descriptions organized bellow their categories. The categories are represented by `##@` and the target descriptions by `##`.
+# The awk commands is responsable to read the entire set of makefiles included in this invocation, looking for lines of the file as xyz: ## something, and then pretty-format the target and help. Then, if there's a line with ##@ something, that gets pretty-printed as a category.
+# More info over the usage of ANSI control characters for terminal formatting: https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
+# More info over awk command: http://linuxcommand.org/lc3_adv_awk.php
+.PHONY: help
+help:  ## Display this help
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+##@ Build
+
+manager: generate fmt vet ## Build the controller-manager binary
 	go build -o bin/manager main.go
 
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
+docker-build: test ## Build the docker image
+	docker build . -t ${IMG}
+
+docker-push: ## Push the docker image
+	docker push ${IMG}
+
+.PHONY: bundle
+bundle: manifests ## Generate bundle manifests and metadata, then validate generated files
+	operator-sdk generate kustomize manifests -q
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	operator-sdk bundle validate ./bundle
+
+
+.PHONY: bundle-build
+bundle-build: ## Build the bundle image.
+	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+
+##@ Development
+
+run: generate fmt vet manifests ## Run against the configured Kubernetes cluster in ~/.kube/config
 	go run ./main.go
 
-# Install CRDs into a cluster
-install: manifests kustomize
+fmt: ## Run go fmt against code
+	go fmt ./...
+
+vet: ## Run go vet against code
+	go vet ./...
+
+generate: controller-gen ## Generate code
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+manifests: controller-gen ## Generate manifests e.g. CRD, RBAC etc.
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+install: manifests kustomize ## Install CRDs into a cluster
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
-# Uninstall CRDs from a cluster
-uninstall: manifests kustomize
-	$(KUSTOMIZE) build config/crd | kubectl delete -f -
-
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests kustomize
+deploy: manifests kustomize ## Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 
-# Generate manifests e.g. CRD, RBAC etc.
-manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+uninstall: manifests kustomize ## Uninstall CRDs from a cluster
+	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
-# Run go fmt against code
-fmt:
-	go fmt ./...
+##@ Test
 
-# Run go vet against code
-vet:
-	go vet ./...
+test: generate fmt vet manifests ## Run tests
+	go test ./... -coverprofile cover.out
 
-# Generate code
-generate: controller-gen
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
-
-# Build the docker image
-docker-build: test
-	docker build . -t ${IMG}
-
-# Push the docker image
-docker-push:
-	docker push ${IMG}
+# Binary tools
 
 # find or download controller-gen
 # download controller-gen if necessary
@@ -106,15 +127,17 @@ else
 KUSTOMIZE=$(shell which kustomize)
 endif
 
-# Generate bundle manifests and metadata, then validate generated files.
-.PHONY: bundle
-bundle: manifests
-	operator-sdk generate kustomize manifests -q
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
-	operator-sdk bundle validate ./bundle
-
-# Build the bundle image.
-.PHONY: bundle-build
-bundle-build:
-	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+operator-sdk:
+ifeq (, $(shell which operator-sdk))
+	{ \
+	set -e ;\
+	OSDK_TMP_DIR=$$(mktemp -d) ;\
+	cd $$OSDK_TMP_DIR ;\
+	curl -Lo $(OSDK) https://github.com/operator-framework/operator-sdk/releases/download/${OSDK_VERSION}/operator-sdk-${OSDK_VERSION}-${MACHINE}-linux-gnu ;\
+	chmod +x $(OSDK) ;\
+	rm -rf $$OSDK_TMP_DIR ;\
+	}
+OSDK=$(GOBIN)/operator-sdk
+else
+OSDK=$(shell which operator-sdk)
+endif
