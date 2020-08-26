@@ -35,6 +35,10 @@ OSDK=operator-sdk
 OSDK_VERSION=v1.0.0
 MACHINE=$(shell uname -m)
 
+# Golangci-lint version to use for code linting.
+GOLANGCI_LINT=golangci-lint
+GOLANGCI_LINT_VERSION="v1.30.0"
+
 ##@ General
 
 # The help will print out all targets with their descriptions organized bellow their categories. The categories are represented by `##@` and the target descriptions by `##`.
@@ -52,7 +56,7 @@ help:  ## Display this help
 
 ##@ Build
 
-manager: generate fmt vet ## Build the controller-manager binary
+manager: generate golangci-lint ## Build the controller-manager binary
 	go build -o bin/manager main.go
 
 docker-build: test ## Build the docker image
@@ -75,14 +79,11 @@ bundle-build: ## Build the bundle image.
 
 ##@ Development
 
-run: generate fmt vet manifests ## Run against the configured Kubernetes cluster in ~/.kube/config
+run: generate golangci-lint manifests ## Run against the configured Kubernetes cluster in ~/.kube/config
 	go run ./main.go
 
-fmt: ## Run go fmt against code
-	go fmt ./...
-
-vet: ## Run go vet against code
-	go vet ./...
+lint: golangci-lint ## Run golangci-lint
+	$(GOLANGCI_LINT) run
 
 generate: controller-gen ## Generate code
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -106,7 +107,7 @@ tidy: ## Prune, add and vendor go dependencies.
 
 ##@ Test
 
-test: generate fmt vet manifests ## Run tests
+test: generate golangci-lint manifests ## Run tests
 	go test ./... -coverprofile cover.out
 
 # Binary tools
@@ -156,6 +157,17 @@ ifeq (, $(shell which operator-sdk))
 OSDK=$(GOBIN)/operator-sdk
 else
 OSDK=$(shell which operator-sdk)
+endif
+
+golangci-lint:
+ifeq (, $(shell which golangci-lint))
+	@{ \
+	set -e ;\
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) $(GOLANGCI_LINT_VERSION); \
+	}
+GOLANGCI_LINT=$(GOBIN)/golangci-lint
+else
+GOLANGCI_LINT=$(shell which golangci-lint)
 endif
 
 # This target matches any target ending in '-docker' eg. 'test-docker'. This
