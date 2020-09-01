@@ -36,6 +36,21 @@ type StorageOSClusterReconciler struct {
 
 // +kubebuilder:rbac:groups=storageos.com,resources=storageosclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=storageos.com,resources=storageosclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=apps,resources=statefulsets;daemonsets;deployments;replicasets,verbs=*
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="",resources=pods;pods/binding;pods/status,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events;namespaces;serviceaccounts;secrets;services;services/finalizers;persistentvolumeclaims;persistentvolumeclaims/status;persistentvolumes;configmaps;replicationcontrollers;endpoints,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings;clusterroles;clusterrolebindings,verbs=create;delete
+// +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses;volumeattachments;csinodeinfos;csinodes;csidrivers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=create;delete
+// +kubebuilder:rbac:groups=csi.storage.k8s.io,resources=csidrivers,verbs=create;delete
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=list;watch
+// +kubebuilder:rbac:groups=security.openshift.io,resourceNames=privileged,resources=securitycontextconstraints,verbs=create;delete;update;get;use
+// +kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,verbs=*
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=*
+// +kubebuilder:rbac:groups=apps,resourceNames=storageos-cluster-operator,resources=deployments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;create;update
 
 func (r *StorageOSClusterReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
