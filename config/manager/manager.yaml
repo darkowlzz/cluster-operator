@@ -1,34 +1,30 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  labels:
-    control-plane: controller-manager
-  name: system
+  name: storageos-operator
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: controller-manager
-  namespace: system
-  labels:
-    control-plane: controller-manager
+  name: storageos-cluster-operator
+  namespace: storageos-operator
 spec:
   selector:
     matchLabels:
-      control-plane: controller-manager
+      name: storageos-cluster-operator
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: controller-manager
+        name: storageos-cluster-operator
     spec:
       containers:
       - command:
         - /manager
         args:
         - --enable-leader-election
-        image: controller:latest
-        name: manager
+        image: storageos/cluster-operator:test
+        name: storageos-cluster-operator
         resources:
           limits:
             cpu: 100m
